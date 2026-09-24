@@ -1,67 +1,25 @@
-# Alex-ROM
+# Android 15 for Pixel 7 Pro
 
-Platform changes for an Android phone that behaves like a display: when the screen turns on, it opens the home screen instead of the lock screen. The color-matrix change from the [Try Android development](https://source.android.com/docs/setup/start#launch_cuttlefish) guide is included, and Cuttlefish is told to draw that matrix into the framebuffer you see at `https://localhost:8443`.
+This tree builds `aosp_cheetah` from AOSP tag `android-15.0.0_r34` (factory build `BP1A.250505.005.B1`) and opens the launcher on display wake when no PIN, pattern, or password is set.
 
-This repository is not a full Android source tree. Follow the guide to download, build, and launch Cuttlefish, then apply these files on top.
+The plugged-in Pixel 7 Pro (`27231FDH3007FS`) is Android 16 build `CP1A.260405.005`, security patch 2026-04-05, bootloader locked, verified boot green. Do not flash this Android 15 image onto it. The bootloader must be unlocked first, which wipes the phone, and the Android 16 rollback index is newer than this Android 15 build. Flashing an older bootloader can permanently brick the device.
 
-## 1. Get and build Android
-
-On a Linux workstation, follow [Try Android development](https://source.android.com/docs/setup/start) through **Launch Cuttlefish**:
-
-- `repo init --partial-clone -b android-latest-release -u https://android.googlesource.com/platform/manifest`
-- `repo sync -c -j8`
-- `source build/envsetup.sh`
-- `lunch aosp_cf_x86_64_only_phone-aosp_current-userdebug`
-- `m`
-- Install Cuttlefish host packages as the guide describes, then `launch_cvd --daemon`
-- Open `https://localhost:8443`
-
-Use the `adb` built with the tree (`out/host/linux-x86/bin/adb`). Cuttlefish is `0.0.0.0:6520`.
-
-## 2. Apply Alex-ROM
-
-From this repository:
+## Setup
 
 ```bash
-./apply.sh /path/to/aosp
+./setup-cheetah.sh /path/to/aosp-cheetah
 ```
 
-That copies five files into the tree:
+That syncs `android-15.0.0_r34`, downloads the matching Pixel 7 Pro vendor binaries, and copies [device/google/pantah/aosp_cheetah.mk](device/google/pantah/aosp_cheetah.mk) into the tree. `ro.vendor.display.wake_to_home` is a vendor property. `ro.lockscreen.disable.default` is a product property because `vendor_init` cannot set it.
 
-| Path | What it does |
-| --- | --- |
-| `device/google/cuttlefish/vsoc_x86_64_only/phone/aosp_cf.mk` | Sets `ro.lockscreen.disable.default` and `ro.vendor.display.wake_to_home` for this phone |
-| `frameworks/base/.../LockPatternUtils.java` | Honors `ro.lockscreen.disable.default` on a device that already booted, so no lock screen is shown when there is no PIN, pattern, or password |
-| `frameworks/base/.../PhoneWindowManager.java` | On every display wakeup, starts the home screen when `ro.vendor.display.wake_to_home` is set |
-| `frameworks/native/.../SurfaceFlinger.cpp` | The guide's color-matrix edit in `updateColorMatrixLocked()` |
-| `device/generic/goldfish/hals/hwc3/Display.cpp` | On virtio-gpu (`ro.hardware.gralloc=minigbm`), do not advertise `SKIP_CLIENT_COLOR_TRANSFORM`, so the matrix is visible in the Cuttlefish stream |
+## Build
 
-A PIN, pattern, or password still keeps the lock screen.
-
-## 3. Rebuild and update the device
-
-From the AOSP tree, with the same `lunch` target:
+From the AOSP tree:
 
 ```bash
 source build/envsetup.sh
-lunch aosp_cf_x86_64_only_phone-aosp_current-userdebug
+lunch aosp_cheetah-bp1a-userdebug
 m
 ```
 
-`aosp_cf.mk` is part of the vendor image, so install the new vendor image (or rebuild and relaunch Cuttlefish) before the two properties take effect. `framework`, `services`, `surfaceflinger`, and `com.android.hardware.graphics.composer.ranchu` must be rebuilt.
-
-`adb sync` on this target stops at `simpleperf_app_runner` with `remote update_capabilities failed: Operation not permitted`. Push the rebuilt binaries instead, then reboot:
-
-```bash
-adb -s 0.0.0.0:6520 root
-adb -s 0.0.0.0:6520 remount
-adb -s 0.0.0.0:6520 push $ANDROID_PRODUCT_OUT/system/framework/framework.jar /system/framework/framework.jar
-adb -s 0.0.0.0:6520 push $ANDROID_PRODUCT_OUT/system/framework/services.jar /system/framework/services.jar
-adb -s 0.0.0.0:6520 push $ANDROID_PRODUCT_OUT/system/bin/surfaceflinger /system/bin/surfaceflinger
-adb -s 0.0.0.0:6520 push $ANDROID_PRODUCT_OUT/vendor/apex/com.android.hardware.graphics.composer.ranchu.apex /vendor/apex/com.android.hardware.graphics.composer.ranchu.apex
-adb -s 0.0.0.0:6520 reboot
-```
-
-After reboot, turn the Cuttlefish display off and on. The `https://localhost:8443` panel should show the home screen with the color change, not the lock screen.
-
-The same `lunch` target and `m` flow is what the guide uses to program a physical device image; flash that image with the device's fastboot instructions after `m` finishes. The wake-to-home properties are set only on `aosp_cf_x86_64_only_phone`.
+A credential still keeps the lock screen. `isLockScreenDisabled()` stays false when a PIN, pattern, or password is set, and `startedWakingUp()` only calls `startDockOrHome()` when the lock screen is disabled.
