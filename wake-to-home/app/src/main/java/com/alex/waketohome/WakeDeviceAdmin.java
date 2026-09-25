@@ -21,8 +21,8 @@ public class WakeDeviceAdmin extends DeviceAdminReceiver {
 
     @Override
     public void onEnabled(Context context, Intent intent) {
-        apply(context);
         WakeService.start(context);
+        apply(context);
     }
 
     static void apply(Context context) {
@@ -49,11 +49,12 @@ public class WakeDeviceAdmin extends DeviceAdminReceiver {
         }
         try {
             dpm.setPermissionPolicy(admin, DevicePolicyManager.PERMISSION_POLICY_AUTO_GRANT);
-            grantRuntimePermissions(context, dpm, admin, null);
             Log.i(TAG, "Runtime permissions are granted without a prompt");
         } catch (SecurityException e) {
             Log.w(TAG, "Could not auto-grant runtime permissions", e);
         }
+        Context appContext = context.getApplicationContext();
+        new Thread(() -> grantRuntimePermissions(appContext, null), "grant-permissions").start();
     }
 
     /** Grants every dangerous runtime permission. A null package grants them for every installed app. */

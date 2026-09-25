@@ -6,7 +6,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.WindowManager;
 
-/** Turns the display on, then returns to the launcher. */
+/** Turns the display on, then opens Alex Phone. */
 public class ScreenOnActivity extends Activity {
     static void start(Context context) {
         Intent intent = new Intent(context, ScreenOnActivity.class);
@@ -30,10 +30,7 @@ public class ScreenOnActivity extends Activity {
     }
 
     private void openHome() {
-        Intent home = new Intent(Intent.ACTION_MAIN);
-        home.addCategory(Intent.CATEGORY_HOME);
-        home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(home);
+        startActivity(WakeService.alexPhoneIntent());
         finish();
     }
 }

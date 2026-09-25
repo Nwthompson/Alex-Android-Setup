@@ -1,5 +1,6 @@
 package com.alex.waketohome;
 
+import android.content.ComponentName;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -174,10 +175,16 @@ public class WakeService extends Service {
     }
 
     private void openHome() {
-        Log.i(TAG, "Opening home");
-        Intent home = new Intent(Intent.ACTION_MAIN);
-        home.addCategory(Intent.CATEGORY_HOME);
-        home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(home);
+        Log.i(TAG, "Opening Alex Phone");
+        startActivity(alexPhoneIntent());
+    }
+
+    static Intent alexPhoneIntent() {
+        Intent app = new Intent(Intent.ACTION_MAIN);
+        app.setComponent(new ComponentName(
+                "us.ihmc.alexcommands.phone",
+                "us.ihmc.alexCommands.phone.PhoneActivity"));
+        app.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return app;
     }
 }
