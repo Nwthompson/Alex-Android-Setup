@@ -4,12 +4,14 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.hardware.display.DisplayManager;
+import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -25,8 +27,19 @@ public class WakeService extends Service {
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
-                openHome();
+            String action = intent.getAction();
+            if (Intent.ACTION_SCREEN_ON.equals(action)) {
+                onScreenOn();
+            } else if (Intent.ACTION_POWER_CONNECTED.equals(action)) {
+                if (portPowered()) {
+                    wakeFromPort();
+                } else {
+                    turnScreenOff();
+                }
+            } else if (Intent.ACTION_POWER_DISCONNECTED.equals(action)) {
+                if (!portPowered()) {
+                    turnScreenOff();
+                }
             }
         }
     };
@@ -51,7 +64,7 @@ public class WakeService extends Service {
             }
             int state = display.getState();
             if (state == Display.STATE_ON && lastState != Display.STATE_ON) {
-                openHome();
+                onScreenOn();
             }
             lastState = state;
         }
@@ -79,7 +92,16 @@ public class WakeService extends Service {
             lastState = display.getState();
         }
         displays.registerDisplayListener(listener, new Handler(Looper.getMainLooper()));
-        registerReceiver(screenReceiver, new IntentFilter(Intent.ACTION_SCREEN_ON));
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_POWER_CONNECTED);
+        filter.addAction(Intent.ACTION_POWER_DISCONNECTED);
+        registerReceiver(screenReceiver, filter);
+        if (portPowered()) {
+            wakeFromPort();
+        } else {
+            turnScreenOff();
+        }
     }
 
     @Override
@@ -99,6 +121,42 @@ public class WakeService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private void onScreenOn() {
+        if (portPowered()) {
+            openHome();
+        } else {
+            turnScreenOff();
+        }
+    }
+
+    private void wakeFromPort() {
+        Display display = displays == null ? null : displays.getDisplay(Display.DEFAULT_DISPLAY);
+        if (display != null && display.getState() == Display.STATE_ON) {
+            openHome();
+            return;
+        }
+        Log.i(TAG, "Charging port has power; turning the screen on");
+        ScreenOnActivity.start(this);
+    }
+
+    private void turnScreenOff() {
+        DevicePolicyManager dpm = getSystemService(DevicePolicyManager.class);
+        if (dpm == null || !dpm.isDeviceOwnerApp(getPackageName())) {
+            return;
+        }
+        Log.i(TAG, "Charging port has no power; turning the screen off");
+        dpm.lockNow();
+    }
+
+    private boolean portPowered() {
+        Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (battery == null) {
+            return false;
+        }
+        int plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
+        return (plugged & (BatteryManager.BATTERY_PLUGGED_USB | BatteryManager.BATTERY_PLUGGED_AC)) != 0;
     }
 
     private void openHome() {
