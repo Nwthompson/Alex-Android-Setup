@@ -24,6 +24,16 @@ public class WakeService extends Service {
     private DisplayManager displays;
     private int lastState = Display.STATE_UNKNOWN;
 
+    private final BroadcastReceiver packageReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getData() == null) {
+                return;
+            }
+            WakeDeviceAdmin.grantRuntimePermissions(context, intent.getData().getSchemeSpecificPart());
+        }
+    };
+
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -97,6 +107,9 @@ public class WakeService extends Service {
         filter.addAction(Intent.ACTION_POWER_CONNECTED);
         filter.addAction(Intent.ACTION_POWER_DISCONNECTED);
         registerReceiver(screenReceiver, filter);
+        IntentFilter packages = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
+        packages.addDataScheme("package");
+        registerReceiver(packageReceiver, packages);
         if (portPowered()) {
             wakeFromPort();
         } else {
@@ -112,6 +125,7 @@ public class WakeService extends Service {
     @Override
     public void onDestroy() {
         unregisterReceiver(screenReceiver);
+        unregisterReceiver(packageReceiver);
         if (displays != null) {
             displays.unregisterDisplayListener(listener);
         }

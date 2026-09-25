@@ -5,6 +5,9 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.PermissionInfo;
 import android.os.BatteryManager;
 import android.provider.Settings;
 import android.util.Log;
@@ -43,6 +46,48 @@ public class WakeDeviceAdmin extends DeviceAdminReceiver {
             Log.i(TAG, "Screen stays on while the charging port has power");
         } catch (SecurityException e) {
             Log.w(TAG, "Could not set stay-on-while-plugged-in", e);
+        }
+        try {
+            dpm.setPermissionPolicy(admin, DevicePolicyManager.PERMISSION_POLICY_AUTO_GRANT);
+            grantRuntimePermissions(context, dpm, admin, null);
+            Log.i(TAG, "Runtime permissions are granted without a prompt");
+        } catch (SecurityException e) {
+            Log.w(TAG, "Could not auto-grant runtime permissions", e);
+        }
+    }
+
+    /** Grants every dangerous runtime permission. A null package grants them for every installed app. */
+    static void grantRuntimePermissions(Context context, String packageName) {
+        DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
+        ComponentName admin = admin(context);
+        if (dpm == null || !dpm.isDeviceOwnerApp(context.getPackageName())) {
+            return;
+        }
+        grantRuntimePermissions(context, dpm, admin, packageName);
+    }
+
+    private static void grantRuntimePermissions(Context context, DevicePolicyManager dpm,
+            ComponentName admin, String packageName) {
+        PackageManager packages = context.getPackageManager();
+        for (PackageInfo info : packages.getInstalledPackages(PackageManager.GET_PERMISSIONS)) {
+            if (packageName != null && !packageName.equals(info.packageName)) {
+                continue;
+            }
+            if (info.requestedPermissions == null) {
+                continue;
+            }
+            for (String permission : info.requestedPermissions) {
+                try {
+                    PermissionInfo declared = packages.getPermissionInfo(permission, 0);
+                    if (declared.getProtection() != PermissionInfo.PROTECTION_DANGEROUS) {
+                        continue;
+                    }
+                    dpm.setPermissionGrantState(admin, info.packageName, permission,
+                            DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED);
+                } catch (PackageManager.NameNotFoundException ignored) {
+                    // A requested permission may belong to an app that is not installed.
+                }
+            }
         }
     }
 }
